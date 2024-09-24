@@ -1,0 +1,9 @@
+numpy
+scipy
+opencv-python
+matplotlib
+pyqtgraph
+pillow
+pandas
+pyarrow
+fastparquet
