@@ -40,6 +40,39 @@ def get_cap(frame, ref, threshold):
     return t
 
 
+class Cam:
+    def __init__(self, index):
+        self.index = index
+        self.ref = np.loadtxt(f"data/test/testrun/reference_Cam{index}.npytxt")
+        self.height, self.width = self.ref.shape
+        self.pixel_mask = self.ref > 6
+        self.ref[self.pixel_mask] = 0
+
+        self.percentage = 0.10
+        self.min_x, self.max_x = int(self.percentage * self.width), int(
+            (1 - self.percentage) * self.width
+        )
+        self.min_y, self.max_y = int(self.percentage * self.height), int(
+            (1 - self.percentage) * self.height
+        )
+
+        self.threshold = find_threshold(
+            self.ref[self.min_y : self.max_y, self.min_x : self.max_x]
+        )
+        print(self.threshold)
+
+        self.cap = cv2.VideoCapture(cam_index)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)  # auto mode
+
+        self.integrated = np.zeros(self.ref.shape)
+
+
+cam_indices = [
+    0,
+]
+
 if __name__ == "__main__":
 
     from cosmic.calibration import find_threshold
@@ -47,105 +80,52 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import time
 
-    ref0 = np.loadtxt("data/test/testrun/reference_Cam0.npytxt")
-    height, width = ref0.shape
-    pixel_mask0 = ref0 > 5  # mask hot pixels
-    ref0[pixel_mask0] = 0
+    cams = []
 
-    ref1 = np.loadtxt("data/test/testrun/reference_Cam2.npytxt")
-    height, width = ref1.shape
-    pixel_mask1 = ref1 > 5  # mask hot pixels
-    ref1[pixel_mask1] = 0
-
-    ref2 = np.loadtxt("data/test/testrun/reference_Cam4.npytxt")
-    height, width = ref2.shape
-    pixel_mask2 = ref2 > 5  # mask hot pixels
-    ref2[pixel_mask2] = 0
-
-    percentage = 0.10
-    min_x, max_x = int(percentage * width), int((1 - percentage) * width)
-    min_y, max_y = int(percentage * height), int((1 - percentage) * height)
-
-    threshold = find_threshold(ref0[min_y:max_y, min_x:max_x])
-    threshold0 = 10.0
-    threshold1 = 20.0
-    threshold2 = 10.0
-    print(threshold)
-
-    cap0 = cv2.VideoCapture(0)
-    cap0.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap0.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    cap0.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)  # auto mode
-    # cap0.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # manual mode
-    # cap0.set(cv2.CAP_PROP_EXPOSURE, -7)
-
-    cap1 = cv2.VideoCapture(2)
-    cap1.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap1.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    cap1.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)  # auto mode
-    # cap1.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # manual mode
-    # cap1.set(cv2.CAP_PROP_EXPOSURE, -7)
-
-    cap2 = cv2.VideoCapture(4)
-    cap2.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap2.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    cap2.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)  # auto mode
-    # cap2.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)  # manual mode
-    # cap2.set(cv2.CAP_PROP_EXPOSURE, -7)
+    for cam_index in cam_indices:
+        cams.append(Cam(cam_index))
 
     start_time = time.time()
-    integrated0 = np.zeros(ref0.shape)
-    integrated1 = np.zeros(ref1.shape)
-    integrated2 = np.zeros(ref2.shape)
+
     count = 0
     while time.time() - start_time <= 3600.0:
-        cap0.grab()
-        cap1.grab()
-        cap2.grab()
+        for cam in cams:
+            cam.cap.grab()
 
-        ret0, frame0 = cap0.retrieve()
-        frame0 = cv2.cvtColor(frame0, cv2.COLOR_BGR2GRAY)
-        frame0[pixel_mask0] = 0
-
-        ret1, frame1 = cap1.retrieve()
-        frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
-        frame1[pixel_mask1] = 0
-
-        ret2, frame2 = cap2.retrieve()
-        frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-        frame2[pixel_mask2] = 0
-
-        integrated0 += get_cap(frame0, ref0, threshold0)
-        cv2.imshow("frame0", integrated0[min_y:max_y, min_x:max_x])
-        cv2.imshow(
-            "rawframe0",
-            np.clip(frame0[min_y:max_y, min_x:max_x] * 100, a_min=0, a_max=255),
-        )
-        integrated1 += get_cap(frame1, ref1, threshold1)
-        cv2.imshow("frame1", integrated1[min_y:max_y, min_x:max_x])
-
-        integrated2 += get_cap(frame2, ref2, threshold2)
-        cv2.imshow("frame2", integrated2[min_y:max_y, min_x:max_x])
+        for cur_count, cam in enumerate(cams):
+            ret, frame = cam.cap.retrieve()
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame[cam.pixel_mask] = 0
+            cam.integrated += get_cap(frame, cam.ref, cam.threshold)
+            cv2.imshow(
+                f"frame{cam.index}",
+                cam.integrated[cam.min_y : cam.max_y, cam.min_x : cam.max_x],
+            )
+            if cur_count == 0:
+                cv2.imshow(
+                    "rawframe0",
+                    np.clip(
+                        frame[cam.min_y : cam.max_y, cam.min_x : cam.max_x] * 20,
+                        a_min=0,
+                        a_max=255,
+                    ),
+                )
 
         count += 1
-        # temp = frame0 - ref0
-        # temp[temp < 0] = 0
-        # temp += np.amin(temp)
-        # temp /= np.amax(temp)
-        # temp = (temp * 255).astype("uint8")
-        # tempCMP = cv2.applyColorMap(temp, cv2.COLORMAP_VIRIDIS)
-        # cv2.imshow(
-        #     "raw",
-        #     temp[min_y:max_y, min_x:max_x],
-        # )
+
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
     #
-    plt.imshow(integrated0[min_y:max_y, min_x:max_x])
+    cur_cam = cams[0]
+    plt.imshow(
+        cur_cam.integrated[cur_cam.min_y : cur_cam.max_y, cur_cam.min_x : cur_cam.max_x]
+    )
     plt.figure()
-    plt.imshow(integrated0[min_y:max_y, min_x:max_x] > 0)
+    plt.imshow(
+        cur_cam.integrated[cur_cam.min_y : cur_cam.max_y, cur_cam.min_x : cur_cam.max_x]
+        > 0
+    )
     plt.savefig("data/test/islandtest.png")
     cv2.destroyAllWindows()
-    cap0.release()
-    cap1.release()
-    cap2.release()
+    for cam in cams:
+        cam.cap.release()
