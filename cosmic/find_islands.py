@@ -78,7 +78,7 @@ class Cam:
 
         self.events = []
 
-    def integrate_image(self, display_raw: bool = False):
+    def integrate_image(self):
         ret, frame = self.cap.retrieve()
         self.frame = frame
         self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -154,7 +154,7 @@ if __name__ == "__main__":
             cam.cap.grab()
 
         for cur_count, cam in enumerate(cams):
-            found_rays += cam.integrate_image(display_raw=True)
+            found_rays += cam.integrate_image()
             cv2.imshow(
                 f"frame{cam.index}",
                 cam.integrated[cam.min_y : cam.max_y, cam.min_x : cam.max_x],
@@ -163,7 +163,7 @@ if __name__ == "__main__":
                 cv2.imshow(
                     f"rawframe{cam.index}",
                     np.clip(
-                        frame[cam.min_y : cam.max_y, cam.min_x : cam.max_x] * 20,
+                        cam.frame[cam.min_y : cam.max_y, cam.min_x : cam.max_x] * 20,
                         a_min=0,
                         a_max=255,
                     ),
