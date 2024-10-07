@@ -70,14 +70,15 @@ def calibrate(
     plt.savefig(run + f"/reference_cam{cam_id}.png")
     np.savetxt(run + f"/reference_Cam{cam_id}.npytxt", reference)
 
-    with open(run + f"/config_cam{cam_id}.json", "w+"):
-        json.dumps(
+    with open(run + f"/config_cam{cam_id}.json", "w+") as f:
+        json.dump(
             {
                 "integration time [s]": seconds,
                 "warmup time [s]": warmup_time,
                 "width [pixels]": width,
                 "height [pixels]": height,
-            }
+            },
+            f,
         )
     return reference
 
