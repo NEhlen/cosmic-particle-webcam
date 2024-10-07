@@ -21,9 +21,9 @@ def find_outliers(img: np.ndarray):
     if mean < 0:
         mean = 0
 
-    img[img < mean + 3 * std] = 0
+    img[img < mean + 5 * std] = 0
     img[img < 10] = 0
-    return img, _
+    return img, None
 
 
 def get_cap(frame, ref, threshold):
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
     count = 0
-    while time.time() - start_time <= 3600.0:
+    while time.time() - start_time <= 10800.0:
         for cam in cams:
             cam.cap.grab()
 
@@ -120,6 +120,14 @@ if __name__ == "__main__":
     plt.imshow(
         cur_cam.integrated[cur_cam.min_y : cur_cam.max_y, cur_cam.min_x : cur_cam.max_x]
     )
+    plt.figure()
+    plt.imshow(cur_cam.integrated, vmin=0, vmax=30)
+    plt.hlines(cur_cam.min_y, 0, cur_cam.integrated.shape[1])
+    plt.hlines(cur_cam.max_y, 0, cur_cam.integrated.shape[1])
+    plt.vlines(cur_cam.max_x, 0, cur_cam.integrated.shape[0])
+    plt.vlines(cur_cam.min_x, 0, cur_cam.integrated.shape[0])
+    plt.xlim([0, cur_cam.integrated.shape[1]])
+    plt.ylim([0, cur_cam.integrated.shape[0]])
     plt.figure()
     plt.imshow(
         cur_cam.integrated[cur_cam.min_y : cur_cam.max_y, cur_cam.min_x : cur_cam.max_x]
