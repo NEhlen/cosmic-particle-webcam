@@ -1,54 +1,62 @@
 import numpy as np
 from scipy.ndimage import label
 from scipy import ndimage
+from datetime import datetime
+import logging
+import sys
+
+run_folder = "data/test/logitechc270"
+
+logging_file = "main.log"
+logging.basicConfig(filename=logging_file, level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler(sys.stderr))
 
 
-def find_islands(img: np.ndarray, island_size: int = 4):
+def find_islands(
+    img: np.ndarray, island_size: int = 4
+) -> tuple[np.ndarray, np.ndarray]:
     img_cutoff = (img > 0.0).astype(int)
     labels, num_features = label(img_cutoff)
     # print(num_features)
     areas = ndimage.sum(img_cutoff, labels, range(num_features + 1))
     mask = areas >= island_size
     # filter img
-    filtered_img = mask[labels.ravel()].reshape(labels.shape)
+    # filtered_img = mask[labels.ravel()].reshape(labels.shape)
     img[~mask[labels.ravel()].reshape(labels.shape)] = 0
 
     return img, img_cutoff
 
 
-def find_outliers(img: np.ndarray):
+def find_outliers(img: np.ndarray) -> np.ndarray:
     mean, std = img.mean(), img.std()
     if mean < 0:
         mean = 0
 
     img[img < mean + 5 * std] = 0
     img[img < 10] = 0
-    return img, None
+    return img
 
 
-def get_cap(frame, ref, threshold):
+def get_cap(frame: np.ndarray, ref: np.ndarray):
 
-    # t, raw_img = find_islands(
-    #    frame - ref - threshold
-    # )
-    # t = np.clip(t, a_min=0, a_max=255)
-    # return t + threshold * (t > 0.0).astype(int)
-    t, _ = find_outliers(frame - ref)
+    t = find_outliers(frame - ref)
 
-    t, raw_img = find_islands(t)
+    t, _ = find_islands(t)
     t = np.clip(t, a_min=0, a_max=255)
     return t
 
 
 class Cam:
-    def __init__(self, index):
+    def __init__(self, index: int, cutoff_percentage: float = 0.15):
         self.index = index
-        self.ref = np.loadtxt(f"data/test/testrun/reference_Cam{index}.npytxt")
+        self.ref = np.loadtxt(run_folder + f"/reference_Cam{index}.npytxt")
+        self.frame = np.zeros(self.ref.shape)
         self.height, self.width = self.ref.shape
         self.pixel_mask = self.ref > 6
         self.ref[self.pixel_mask] = 0
 
-        self.percentage = 0.10
+        self.percentage = cutoff_percentage
         self.min_x, self.max_x = int(self.percentage * self.width), int(
             (1 - self.percentage) * self.width
         )
@@ -68,6 +76,57 @@ class Cam:
 
         self.integrated = np.zeros(self.ref.shape)
 
+        self.events = []
+
+    def integrate_image(self, display_raw: bool = False):
+        ret, self.frame = self.cap.retrieve()
+        self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        self.frame[self.pixel_mask] = 0
+        processed = get_cap(
+            self.frame[self.min_y : self.max_y, self.min_x : self.max_x],
+            self.ref[self.min_y : self.max_y, self.min_x : self.max_x],
+        )
+        found_rays = False
+        if processed.sum() > 0:
+            event = {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+                "image": processed,
+            }
+            self.events.append(event)
+            found_rays = True
+
+        # pad processed back to original shape
+        processed = np.pad(
+            processed,
+            [
+                (self.min_y, self.ref.shape[0] - self.max_y),
+                (self.min_x, self.ref.shape[1] - self.max_x),
+            ],
+            mode="constant",
+            constant_values=0,
+        )
+
+        self.integrated += processed
+
+        cv2.imshow(
+            f"frame{self.index}",
+            self.integrated[self.min_y : self.max_y, self.min_x : self.max_x],
+        )
+
+        if display_raw:
+            cv2.imshow(
+                f"rawframe{self.index}",
+                np.clip(
+                    frame[self.min_y : self.max_y, self.min_x : self.max_x] * 20,
+                    a_min=0,
+                    a_max=255,
+                ),
+            )
+        if found_rays:
+            return 1
+        else:
+            return 0
+
 
 cam_indices = [
     0,
@@ -80,42 +139,44 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import time
 
-    cams = []
-
+    logger.info("##### NEW RUN #####")
+    logger.info(f"Saving to {run_folder}")
+    cams: list[Cam] = []
     for cam_index in cam_indices:
+        logger.info(f"initializing Cam {cam_index}")
         cams.append(Cam(cam_index))
 
-    start_time = time.time()
+    # warmup
+    null_time = time.time()
+    warmup = 60
+    logger.info(f"Warming up for {warmup} seconds")
+    while time.time() - null_time <= warmup:
+        for cam in cams:
+            cam.cap.grab()
+        for count, cam in enumerate(cams):
+            ret, frame = cam.cap.retrieve()
 
+    # capture
+    capture_time = 3600.0 * 3
+    logger.info(f"Capturing for {capture_time} seconds")
+    start_time = time.time()
     count = 0
-    while time.time() - start_time <= 10800.0:
+    found_rays = 0
+    while time.time() - start_time <= capture_time:
         for cam in cams:
             cam.cap.grab()
 
         for cur_count, cam in enumerate(cams):
-            ret, frame = cam.cap.retrieve()
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            frame[cam.pixel_mask] = 0
-            cam.integrated += get_cap(frame, cam.ref, cam.threshold)
-            cv2.imshow(
-                f"frame{cam.index}",
-                cam.integrated[cam.min_y : cam.max_y, cam.min_x : cam.max_x],
-            )
             if cur_count == 0:
-                cv2.imshow(
-                    "rawframe0",
-                    np.clip(
-                        frame[cam.min_y : cam.max_y, cam.min_x : cam.max_x] * 20,
-                        a_min=0,
-                        a_max=255,
-                    ),
-                )
+                found_rays += cam.integrate_image(display_raw=True)
+            else:
+                found_rays += cam.integrate_image(display_raw=False)
 
         count += 1
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-    #
+    logger.info(f"Finished integration, found {found_rays} potential rays")
     cur_cam = cams[0]
     plt.imshow(
         cur_cam.integrated[cur_cam.min_y : cur_cam.max_y, cur_cam.min_x : cur_cam.max_x]
@@ -133,7 +194,7 @@ if __name__ == "__main__":
         cur_cam.integrated[cur_cam.min_y : cur_cam.max_y, cur_cam.min_x : cur_cam.max_x]
         > 0
     )
-    plt.savefig("data/test/islandtest.png")
+    plt.savefig(run_folder + "/cosmic_rays.png")
     cv2.destroyAllWindows()
     for cam in cams:
         cam.cap.release()
