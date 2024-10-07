@@ -8,7 +8,7 @@ import sys
 
 import json
 
-logging_file = "main.log"
+logging_file = "calibration.log"
 logging.basicConfig(filename=logging_file, level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler(sys.stderr))
