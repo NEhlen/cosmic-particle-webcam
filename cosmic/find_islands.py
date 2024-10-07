@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
     # warmup
     null_time = time.time()
-    warmup = 1
+    warmup = 60
     logger.info(f"Warming up for {warmup} seconds")
     while time.time() - null_time <= warmup:
         for cam in cams:
