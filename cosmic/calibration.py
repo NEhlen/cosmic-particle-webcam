@@ -93,11 +93,11 @@ if __name__ == "__main__":
     os.makedirs("data/test/logitechc270", exist_ok=True)
 
     ref0 = calibrate(
-        180,
+        1200,
         width=1280,
         height=960,
         cam_id=0,
-        warmup_time=60.0,
+        warmup_time=600.0,
         run="data/test/logitechc270",
     )  # 1280,  # 720,
     # ref1 = calibrate(
