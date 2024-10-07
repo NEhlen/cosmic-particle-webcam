@@ -14,7 +14,7 @@ logger.addHandler(logging.StreamHandler(sys.stderr))
 
 
 def find_islands(
-    img: np.ndarray, island_size: int = 4
+    img: np.ndarray, island_size: int = 9
 ) -> tuple[np.ndarray, np.ndarray]:
     img_cutoff = (img > 0.0).astype(int)
     labels, num_features = label(img_cutoff)
@@ -135,7 +135,7 @@ if __name__ == "__main__":
 
     # warmup
     null_time = time.time()
-    warmup = 60
+    warmup = 120
     logger.info(f"Warming up for {warmup} seconds")
     while time.time() - null_time <= warmup:
         for cam in cams:
