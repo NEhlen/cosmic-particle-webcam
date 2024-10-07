@@ -79,7 +79,8 @@ class Cam:
         self.events = []
 
     def integrate_image(self, display_raw: bool = False):
-        ret, self.frame = self.cap.retrieve()
+        ret, frame = self.cap.retrieve()
+        self.frame = frame
         self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         self.frame[self.pixel_mask] = 0
         processed = get_cap(
@@ -108,20 +109,6 @@ class Cam:
 
         self.integrated += processed
 
-        cv2.imshow(
-            f"frame{self.index}",
-            self.integrated[self.min_y : self.max_y, self.min_x : self.max_x],
-        )
-
-        if display_raw:
-            cv2.imshow(
-                f"rawframe{self.index}",
-                np.clip(
-                    frame[self.min_y : self.max_y, self.min_x : self.max_x] * 20,
-                    a_min=0,
-                    a_max=255,
-                ),
-            )
         if found_rays:
             return 1
         else:
@@ -148,7 +135,7 @@ if __name__ == "__main__":
 
     # warmup
     null_time = time.time()
-    warmup = 60
+    warmup = 1
     logger.info(f"Warming up for {warmup} seconds")
     while time.time() - null_time <= warmup:
         for cam in cams:
@@ -167,10 +154,20 @@ if __name__ == "__main__":
             cam.cap.grab()
 
         for cur_count, cam in enumerate(cams):
+            found_rays += cam.integrate_image(display_raw=True)
+            cv2.imshow(
+                f"frame{cam.index}",
+                cam.integrated[cam.min_y : cam.max_y, cam.min_x : cam.max_x],
+            )
             if cur_count == 0:
-                found_rays += cam.integrate_image(display_raw=True)
-            else:
-                found_rays += cam.integrate_image(display_raw=False)
+                cv2.imshow(
+                    f"rawframe{cam.index}",
+                    np.clip(
+                        frame[cam.min_y : cam.max_y, cam.min_x : cam.max_x] * 20,
+                        a_min=0,
+                        a_max=255,
+                    ),
+                )
 
         count += 1
 
