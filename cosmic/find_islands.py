@@ -4,6 +4,8 @@ from scipy import ndimage
 from datetime import datetime
 import logging
 import sys
+import cv2
+from cosmic.calibration import find_threshold
 
 run_folder = "data/test/logitechc270"
 
@@ -48,7 +50,7 @@ def get_cap(frame: np.ndarray, ref: np.ndarray):
 
 
 class Cam:
-    def __init__(self, index: int, cutoff_percentage: float = 0.15):
+    def __init__(self, index: int, cutoff_percentage: float = 0.2):
         self.index = index
         self.ref = np.loadtxt(run_folder + f"/reference_Cam{index}.npytxt")
         self.frame = np.zeros(self.ref.shape)
@@ -69,17 +71,12 @@ class Cam:
         )
         print(self.threshold)
 
-        self.cap = cv2.VideoCapture(cam_index)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)  # auto mode
-
         self.integrated = np.zeros(self.ref.shape)
 
         self.events = []
 
-    def integrate_image(self):
-        ret, frame = self.cap.retrieve()
+    def integrate_image(self, cap: cv2.VideoCapture):
+        _, frame = cap.retrieve()
         self.frame = frame
         self.frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         self.frame[self.pixel_mask] = 0
@@ -115,33 +112,43 @@ class Cam:
             return 0
 
 
+def initialize_cam(cam_index: int) -> tuple[Cam, cv2.VideoCapture]:
+    cap = cv2.VideoCapture(cam_index)
+    cam = Cam(cam_index)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, cam.width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cam.height)
+    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)  # auto mode
+    return cam, cap
+
+
 cam_indices = [
     0,
 ]
 
 if __name__ == "__main__":
 
-    from cosmic.calibration import find_threshold
-    import cv2
     import matplotlib.pyplot as plt
     import time
 
     logger.info("##### NEW RUN #####")
     logger.info(f"Saving to {run_folder}")
     cams: list[Cam] = []
+    captures: list[cv2.VideoCapture] = []
     for cam_index in cam_indices:
         logger.info(f"initializing Cam {cam_index}")
+        cam, cap = initialize_cam(cam_index)
         cams.append(Cam(cam_index))
+        captures.append(cap)
 
     # warmup
     null_time = time.time()
-    warmup = 120
+    warmup = 180
     logger.info(f"Warming up for {warmup} seconds")
     while time.time() - null_time <= warmup:
-        for cam in cams:
-            cam.cap.grab()
-        for count, cam in enumerate(cams):
-            ret, frame = cam.cap.retrieve()
+        for cam, cap in zip(cams, captures):
+            cap.grab()
+        for cam, cap in zip(cams, captures):
+            ret, frame = cap.retrieve()
 
     # capture
     capture_time = 3600.0 * 3
@@ -150,11 +157,11 @@ if __name__ == "__main__":
     count = 0
     found_rays = 0
     while time.time() - start_time <= capture_time:
-        for cam in cams:
-            cam.cap.grab()
+        for cam, cap in zip(cams, captures):
+            cap.grab()
 
-        for cur_count, cam in enumerate(cams):
-            found_rays += cam.integrate_image()
+        for cur_count, (cam, cap) in enumerate(zip(cams, captures)):
+            found_rays += cam.integrate_image(cap)
             cv2.imshow(
                 f"frame{cam.index}",
                 cam.integrated[cam.min_y : cam.max_y, cam.min_x : cam.max_x],
@@ -176,7 +183,10 @@ if __name__ == "__main__":
     logger.info(f"Finished integration, found {found_rays} potential rays")
     cur_cam = cams[0]
     plt.imshow(
-        cur_cam.integrated[cur_cam.min_y : cur_cam.max_y, cur_cam.min_x : cur_cam.max_x]
+        cur_cam.integrated[
+            cur_cam.min_y : cur_cam.max_y, cur_cam.min_x : cur_cam.max_x
+        ],
+        vmax=50,
     )
     plt.figure()
     plt.imshow(cur_cam.integrated, vmin=0, vmax=30)
@@ -193,5 +203,10 @@ if __name__ == "__main__":
     )
     plt.savefig(run_folder + "/cosmic_rays.png")
     cv2.destroyAllWindows()
-    for cam in cams:
-        cam.cap.release()
+    for cap in captures:
+        cap.release()
+
+    import pickle
+
+    with open(run_folder + "/cam0.pickle", "wb+") as f:
+        pickle.dump(cur_cam, f)

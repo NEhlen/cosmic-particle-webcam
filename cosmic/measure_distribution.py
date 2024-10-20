@@ -3,7 +3,7 @@ from scipy.ndimage import label
 from scipy import ndimage
 import pandas as pd
 
-CAM = 4
+CAM = 0
 
 if __name__ == "__main__":
 
@@ -30,7 +30,7 @@ if __name__ == "__main__":
     count = 0
     df = pd.DataFrame()
     cur_t = time.time()
-    while cur_t - start_time <= 1200.0:
+    while cur_t - start_time <= 60.0:
         cap0.grab()
 
         ret0, frame0 = cap0.retrieve()
